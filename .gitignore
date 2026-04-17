@@ -1,0 +1,13 @@
+.pio/
+.vscode/
+*.bin
+*.elf
+*.map
+*.hex
+*.lst
+*.o
+*.d
+*.gcno
+*.gcda
+*.gcov
+lib/readme.txt

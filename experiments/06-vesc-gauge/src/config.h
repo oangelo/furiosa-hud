@@ -1,6 +1,11 @@
 #pragma once
 
 #define VESC_BT_NAME        "VESC_BT"
+#define BT_LOCAL_NAME       "FuriosaHUD"
+
+#define BT_SCAN_TIMEOUT_MS  30000
+#define BT_MAX_DEVICES      5
+#define BT_RECONNECT_MS     3000
 
 #define MOTOR_POLE_PAIRS    14
 #define WHEEL_DIAMETER_MM   254.0f

@@ -11,6 +11,9 @@ struct VescData {
   float tripKm;
   int batteryPct;
   bool btConnected;
+  float ampHours;
+  long tachometerAbs;
+  int error;
 };
 
 enum Screen { SCREEN_MAIN, SCREEN_DETAIL };

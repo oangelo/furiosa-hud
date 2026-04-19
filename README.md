@@ -16,6 +16,7 @@ Heads-up display de telemetria para o triciclo elétrico **Furiosa**, usando um 
 | 03 | [vesc-data-serial](experiments/03-vesc-data-serial/) | Ler dados do VESC via UART e imprimir no Serial Monitor |
 | 04 | [dados-na-tela](experiments/04-dados-na-tela/) | Combinar BT + display: mostrar telemetria do VESC em tempo real |
 | 05 | [gauge](experiments/05-gauge/) | Gauge semi-circular de velocidade (0–35 km/h) |
+| 06 | [vesc-gauge](experiments/06-vesc-gauge/) | Gauge + BT SPP scan com seleção por touch e telemetria VescUart |
 
 ## Referências
 

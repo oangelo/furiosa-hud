@@ -18,4 +18,4 @@
 #define DISPLAY_UPDATE_MS   100
 #define DETAIL_SCREEN_TIMEOUT 5000
 
-#define TOUCH_PIN           0
+

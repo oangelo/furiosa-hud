@@ -6,7 +6,6 @@
 static Screen currentScreen = SCREEN_MAIN;
 static unsigned long detailEnterTime = 0;
 static bool screenDirty = false;
-static bool lastTouchState = false;
 static unsigned long lastTouchTime = 0;
 static constexpr unsigned long TOUCH_DEBOUNCE = 300;
 
@@ -22,8 +21,8 @@ static constexpr int BT_CY = 10;
 static constexpr int BT_R  = 4;
 
 static constexpr int DET_COL_X[2] = {80, 240};
-static constexpr int DET_VAL_Y[3] = {50, 112, 174};
-static constexpr int DET_LBL_Y[3] = {68, 130, 192};
+static constexpr int DET_LBL_Y[3] = {36, 96, 156};
+static constexpr int DET_VAL_Y[3] = {58, 118, 178};
 static constexpr int DET_FOOTER_Y = 224;
 
 static void drawBatteryBar(int pct) {
@@ -200,10 +199,10 @@ void screens::update(const VescData& data) {
 }
 
 void screens::handleTouch() {
-  bool touched = (digitalRead(TOUCH_PIN) == LOW);
+  int16_t tx, ty;
+  bool touched = lcd.getTouch(&tx, &ty);
 
-  if (touched && !lastTouchState &&
-      millis() - lastTouchTime > TOUCH_DEBOUNCE) {
+  if (touched && millis() - lastTouchTime > TOUCH_DEBOUNCE) {
     lastTouchTime = millis();
 
     if (currentScreen == SCREEN_MAIN) {
@@ -214,6 +213,4 @@ void screens::handleTouch() {
     }
     screenDirty = true;
   }
-
-  lastTouchState = touched;
 }

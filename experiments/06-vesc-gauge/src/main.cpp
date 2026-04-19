@@ -50,8 +50,6 @@ void setup() {
   Serial.begin(115200);
   pinMode(BACKLIGHT_PIN, OUTPUT);
   digitalWrite(BACKLIGHT_PIN, HIGH);
-  pinMode(TOUCH_PIN, INPUT_PULLUP);
-
   lcd.init();
   lcd.setRotation(DISPLAY_ROTATION);
 

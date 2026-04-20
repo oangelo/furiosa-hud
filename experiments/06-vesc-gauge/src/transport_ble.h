@@ -1,24 +1,17 @@
 #pragma once
 #include <Arduino.h>
 #include "transport.h"
-#include "screens.h"
+#include "config.h"
 
-namespace vesc_bt {
+namespace ble_transport {
   void init();
-  void setBtType(BtType type);
-  BtType getBtType();
-
   void startScan();
   bool isScanComplete();
   int getDeviceCount();
   const BtDevice& getDevice(int index);
   int findDeviceByName(const char* name);
-
-  bool connectByName(const char* name);
   bool connectByIndex(int index);
   bool isConnected();
-  bool read(VescData& data);
+  Stream* getStream();
   void disconnect();
-
-  extern String lastConnectedAddress;
 }

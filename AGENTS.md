@@ -15,7 +15,7 @@ Se a porta estiver ocupada, usar `--upload-port` explicitamente ou `fuser -k /de
 
 ## Convenções de Código
 
-- **Namespaces** para módulos: `vesc_bt::`, `bt_screen::`, `screens::`, `gauge::`
+- **Namespaces** para módulos: `vesc_bt::`, `bt_screen::`, `screens::`, `gauge::`, `ble_transport::`
 - **`static`** para funções e variáveis internas de cada `.cpp`
 - **Dirty flags** para controlar redraw — `screenDirty = true` ao trocar de estado/tela
 - **Structs de dados** em headers compartilhados (`VescData` em `screens.h`)
@@ -28,6 +28,7 @@ Se a porta estiver ocupada, usar `--upload-port` explicitamente ou `fuser -k /de
 | SolidGeek/VescUart | ^1.0.0 | Requer patches manuais (ver abaixo) |
 | lovyan03/LovyanGFX | ^1.1.16 | Display driver |
 | BluetoothSerial | built-in | ESP32 Arduino framework |
+| ESP32 BLE Arduino | built-in | BLE GATT client |
 
 ## Bugs Conhecidos — VescUart 1.0.1
 
@@ -135,13 +136,46 @@ Com um **VESC real** (com módulo BT Classic embutido), nenhuma configuração d
 
 ### Compatibilidade de Hardware
 
-| Hardware | BT Classic SPP | Compatível |
-|---|---|---|
-| VESC + módulo BT Classic (Flipsky, etc.) | Sim | **Sim** |
-| VESC Express (ESP32-C3) | Não (BLE only) | **Não** |
+| Hardware | BT Classic SPP | BLE | Compatível |
+|---|---|---|---|
+| VESC + módulo BT Classic (Flipsky, etc.) | Sim | Não | **Sim** (Classic) |
+| VESC Express (ESP32-C3) | Não | Sim | **Sim** (BLE) |
 
-O ESP32-C3 e ESP32-S3 só suportam BLE. O `BluetoothSerial` (SPP) requer ESP32 original (D0WD, WROOM, WROVER).
-Para suportar VESC Express seria necessário reescrever a camada BT usando BLE GATT.
+O HUD suporta **ambos os modos** — o usuário alterna via botão toggle na tela LIST.
+ESP32 original (CYD) suporta Classic e BLE, mas **não simultaneamente**.
+
+## BLE Transport
+
+### Arquitetura
+
+```
+transport.h          → BtType enum + BtDevice struct
+transport_ble.h/cpp  → ble_transport:: namespace (BLE GATT client + BLEStream)
+vesc_bt.h/cpp        → vesc_bt:: namespace (dispatcher Classic/BLE)
+```
+
+### VESC Express BLE Protocol
+
+| UUID | Tipo | Função |
+|---|---|---|
+| `6e400001-...` | Service | VESC UART Service |
+| `6e400002-...` | Characteristic | **RX** — cliente escreve comandos |
+| `6e400003-...` | Characteristic | **TX** — servidor envia notificações |
+
+Protocolo idêntico ao UART — mesmo framing VESC, transportado sobre BLE GATT.
+
+### BLEStream
+
+`BLEStream` herda de `Stream` — buffer circular preenchido pelo callback de notify do TX characteristic.
+O `VescUart.setSerialPort()` aceita o `Stream*` retornado por `ble_transport::getStream()`.
+
+### Toggle Classic/BLE
+
+Na tela LIST, dois botões na barra inferior:
+- **[Classic]** / **[BLE]** — alterna o modo e re-escaneia
+- **[Scan]** — re-escaneia no modo atual
+
+`handleTouch()` retorna `-3` quando o toggle é pressionado. `main.cpp` troca `BtType`, chama `vesc_bt::setBtType()` e reinicia o scan.
 
 ## BtState — Indicador Bluetooth
 

@@ -8,8 +8,13 @@ static constexpr int ROW_START_Y = HEADER_H + 8;
 static constexpr int ROW_PAD     = 4;
 static constexpr int BTN_H       = 36;
 static constexpr int BTN_Y       = 240 - BTN_H - 4;
-static constexpr int BTN_X       = 80;
-static constexpr int BTN_W       = 160;
+static constexpr int BTN_X       = 120;
+static constexpr int BTN_W       = 120;
+
+static constexpr int TOG_H       = 36;
+static constexpr int TOG_Y       = BTN_Y;
+static constexpr int TOG_X       = 4;
+static constexpr int TOG_W       = 108;
 
 static constexpr uint16_t COL_BG       = TFT_BLACK;
 static constexpr uint16_t COL_HEADER   = 0x18E3;
@@ -67,9 +72,25 @@ void bt_screen::updateScanningDots(unsigned long elapsed) {
   lcd.drawString(buf, 160, 158);
 }
 
-void bt_screen::drawDeviceListStatic(BtDevice* devices, int count) {
+static constexpr uint16_t COL_TOG_BG  = 0x04DF;
+static constexpr uint16_t COL_TOG_TXT = TFT_WHITE;
+
+void bt_screen::drawDeviceListStatic(BtDevice* devices, int count, BtType btType) {
   lcd.fillScreen(COL_BG);
   drawHeader();
+
+  lcd.fillRoundRect(TOG_X, TOG_Y, TOG_W, TOG_H, 8, COL_TOG_BG);
+  lcd.setTextDatum(middle_center);
+  lcd.setFont(&fonts::Font2);
+  lcd.setTextColor(COL_TOG_TXT);
+  const char* modeLabel = btType == BT_TYPE_CLASSIC ? "Classic" : "BLE";
+  lcd.drawString(modeLabel, TOG_X + TOG_W / 2, TOG_Y + TOG_H / 2);
+
+  lcd.fillRoundRect(BTN_X, BTN_Y, BTN_W, BTN_H, 8, COL_BTN_BG);
+  lcd.setTextDatum(middle_center);
+  lcd.setFont(&fonts::Font2);
+  lcd.setTextColor(COL_BTN_TXT);
+  lcd.drawString("Scan", BTN_X + BTN_W / 2, BTN_Y + BTN_H / 2);
 
   if (count == 0) {
     lcd.setTextDatum(middle_center);
@@ -94,6 +115,8 @@ void bt_screen::drawDeviceListStatic(BtDevice* devices, int count) {
     lcd.setTextColor(COL_TEXT);
     lcd.drawString(idx, 18, y + ROW_H / 2);
 
+    const char* typeTag = devices[i].type == BT_TYPE_BLE ? "BLE" : "BT";
+
     if (devices[i].hasName) {
       lcd.setFont(&fonts::Font2);
       lcd.setTextColor(COL_GREEN);
@@ -111,13 +134,12 @@ void bt_screen::drawDeviceListStatic(BtDevice* devices, int count) {
       lcd.setTextColor(COL_DIM);
       lcd.drawString(devices[i].address.c_str(), 42, y + ROW_H / 2 + 8);
     }
-  }
 
-  lcd.fillRoundRect(BTN_X, BTN_Y, BTN_W, BTN_H, 8, COL_BTN_BG);
-  lcd.setTextDatum(middle_center);
-  lcd.setFont(&fonts::Font2);
-  lcd.setTextColor(COL_BTN_TXT);
-  lcd.drawString("Re-escanear", BTN_X + BTN_W / 2, BTN_Y + BTN_H / 2);
+    lcd.setTextDatum(middle_right);
+    lcd.setFont(&fonts::Font0);
+    lcd.setTextColor(COL_BT_BLUE);
+    lcd.drawString(typeTag, 310, y + ROW_H / 2);
+  }
 }
 
 void bt_screen::drawConnectingStatic(const char* name) {
@@ -169,6 +191,10 @@ void bt_screen::drawDisconnectedStatic() {
 int bt_screen::handleTouch(BtDevice* devices, int count) {
   int16_t tx, ty;
   if (!lcd.getTouch(&tx, &ty)) return -1;
+
+  if (tx >= TOG_X && tx <= TOG_X + TOG_W && ty >= TOG_Y && ty <= TOG_Y + TOG_H) {
+    return -3;
+  }
 
   if (tx >= BTN_X && tx <= BTN_X + BTN_W && ty >= BTN_Y && ty <= BTN_Y + BTN_H) {
     return -2;

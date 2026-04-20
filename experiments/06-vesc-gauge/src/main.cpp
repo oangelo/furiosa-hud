@@ -154,7 +154,7 @@ void loop() {
         int count = vesc_bt::getDeviceCount();
         BtDevice devs[BT_MAX_DEVICES];
         for (int i = 0; i < count; i++) devs[i] = vesc_bt::getDevice(i);
-        bt_screen::drawDeviceListStatic(devs, count);
+        bt_screen::drawDeviceListStatic(devs, count, vesc_bt::getBtType());
         screenDirty = false;
       }
 
@@ -163,7 +163,12 @@ void loop() {
       for (int i = 0; i < count; i++) devs[i] = vesc_bt::getDevice(i);
       int touch = bt_screen::handleTouch(devs, count);
 
-      if (touch == -2) {
+      if (touch == -3) {
+        BtType newType = (vesc_bt::getBtType() == BT_TYPE_CLASSIC) ? BT_TYPE_BLE : BT_TYPE_CLASSIC;
+        vesc_bt::setBtType(newType);
+        vesc_bt::startScan();
+        enterState(SCANNING);
+      } else if (touch == -2) {
         vesc_bt::startScan();
         enterState(SCANNING);
       } else if (touch >= 0) {

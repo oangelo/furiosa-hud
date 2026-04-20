@@ -2,6 +2,7 @@
 #include "config.h"
 #include "BluetoothSerial.h"
 #include <VescUart.h>
+#include "transport_ble.h"
 
 #if !defined(CONFIG_BT_ENABLED) || !defined(CONFIG_BLUEDROID_ENABLED)
 #error Bluetooth is not enabled!
@@ -10,10 +11,10 @@
 static BluetoothSerial SerialBT;
 static VescUart vesc;
 
+static BtType currentBtType = BT_TYPE_CLASSIC;
 static BtDevice devices[BT_MAX_DEVICES];
 static int deviceCount = 0;
 static bool scanDone = false;
-static unsigned long scanStartTime = 0;
 
 String vesc_bt::lastConnectedAddress = "";
 
@@ -26,44 +27,71 @@ void vesc_bt::init() {
   SerialBT.enableSSP();
   SerialBT.onConfirmRequest(onConfirmRequest);
   SerialBT.begin(BT_LOCAL_NAME, true);
-  Serial.println("[BT] Initialized as master (SSP auto-confirm)");
+  ble_transport::init();
+  Serial.println("[BT] Initialized (Classic + BLE)");
 }
+
+void vesc_bt::setBtType(BtType type) {
+  if (currentBtType == type) return;
+  currentBtType = type;
+  Serial.printf("[BT] Mode changed to %s\n", type == BT_TYPE_CLASSIC ? "Classic" : "BLE");
+}
+
+BtType vesc_bt::getBtType() { return currentBtType; }
 
 void vesc_bt::startScan() {
   deviceCount = 0;
   scanDone = false;
-  scanStartTime = millis();
 
-  Serial.println("[BT] Starting synchronous scan...");
-  BTScanResults* results = SerialBT.discover(BT_SCAN_TIMEOUT_MS);
-  if (results) {
-    int count = results->getCount();
-    Serial.printf("[BT] Scan returned %d raw results\n", count);
-    for (int i = 0; i < count && deviceCount < BT_MAX_DEVICES; i++) {
-      BTAdvertisedDevice* dev = results->getDevice(i);
-      if (!dev) continue;
+  if (currentBtType == BT_TYPE_CLASSIC) {
+    Serial.println("[BT] Starting Classic scan...");
+    BTScanResults* results = SerialBT.discover(BT_SCAN_TIMEOUT_MS);
+    if (results) {
+      int count = results->getCount();
+      Serial.printf("[BT] Scan returned %d raw results\n", count);
+      for (int i = 0; i < count && deviceCount < BT_MAX_DEVICES; i++) {
+        BTAdvertisedDevice* dev = results->getDevice(i);
+        if (!dev) continue;
 
-      BtDevice btDev;
-      btDev.address = dev->getAddress().toString().c_str();
-      btDev.hasName = dev->haveName();
-      btDev.name = btDev.hasName ? dev->getName().c_str() : "";
-      devices[deviceCount] = btDev;
-      deviceCount++;
+        BtDevice btDev;
+        btDev.address = dev->getAddress().toString().c_str();
+        btDev.hasName = dev->haveName();
+        btDev.name = btDev.hasName ? dev->getName().c_str() : "";
+        btDev.type = BT_TYPE_CLASSIC;
+        devices[deviceCount] = btDev;
+        deviceCount++;
 
-      Serial.printf("[BT] Found: %s %s\n",
-        btDev.hasName ? btDev.name.c_str() : "(sem nome)",
-        btDev.address.c_str());
+        Serial.printf("[BT] Found: %s %s\n",
+          btDev.hasName ? btDev.name.c_str() : "(sem nome)",
+          btDev.address.c_str());
+      }
+    } else {
+      Serial.println("[BT] Scan returned null!");
     }
+    scanDone = true;
   } else {
-    Serial.println("[BT] Scan returned null!");
+    ble_transport::startScan();
+    deviceCount = ble_transport::getDeviceCount();
+    for (int i = 0; i < deviceCount && i < BT_MAX_DEVICES; i++) {
+      BtDevice d = ble_transport::getDevice(i);
+      devices[i] = d;
+    }
   }
 
-  scanDone = true;
   Serial.printf("[BT] Scan complete, %d devices found\n", deviceCount);
 }
 
 bool vesc_bt::isScanComplete() {
-  return scanDone;
+  if (currentBtType == BT_TYPE_CLASSIC) return true;
+  if (ble_transport::isScanComplete()) {
+    deviceCount = ble_transport::getDeviceCount();
+    for (int i = 0; i < deviceCount && i < BT_MAX_DEVICES; i++) {
+      BtDevice d = ble_transport::getDevice(i);
+      devices[i] = d;
+    }
+    return true;
+  }
+  return false;
 }
 
 int vesc_bt::getDeviceCount() { return deviceCount; }
@@ -77,6 +105,8 @@ int vesc_bt::findDeviceByName(const char* name) {
 }
 
 bool vesc_bt::connectByName(const char* name) {
+  if (currentBtType == BT_TYPE_BLE) return false;
+
   Serial.printf("[BT] Connecting to \"%s\"...\n", name);
   if (SerialBT.connect(name)) {
     vesc.setSerialPort(&SerialBT);
@@ -90,6 +120,13 @@ bool vesc_bt::connectByName(const char* name) {
 
 bool vesc_bt::connectByIndex(int index) {
   if (index < 0 || index >= deviceCount) return false;
+
+  if (currentBtType == BT_TYPE_BLE) {
+    if (!ble_transport::connectByIndex(index)) return false;
+    vesc.setSerialPort(ble_transport::getStream());
+    lastConnectedAddress = devices[index].address;
+    return true;
+  }
 
   BtDevice &dev = devices[index];
   Serial.printf("[BT] Connecting to %s (%s)...\n",
@@ -127,10 +164,13 @@ bool vesc_bt::connectByIndex(int index) {
   return false;
 }
 
-bool vesc_bt::isConnected() { return SerialBT.connected(); }
+bool vesc_bt::isConnected() {
+  if (currentBtType == BT_TYPE_BLE) return ble_transport::isConnected();
+  return SerialBT.connected();
+}
 
 bool vesc_bt::read(VescData& data) {
-  if (!SerialBT.connected()) return false;
+  if (!isConnected()) return false;
   if (!vesc.getVescValues()) return false;
 
   data.voltage     = vesc.data.inpVoltage;
@@ -160,6 +200,10 @@ bool vesc_bt::read(VescData& data) {
 }
 
 void vesc_bt::disconnect() {
-  SerialBT.disconnect();
+  if (currentBtType == BT_TYPE_BLE) {
+    ble_transport::disconnect();
+  } else {
+    SerialBT.disconnect();
+  }
   Serial.println("[BT] Disconnected");
 }

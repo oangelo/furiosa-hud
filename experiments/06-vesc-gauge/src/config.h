@@ -1,5 +1,7 @@
 #pragma once
 
+#define SIMULATE_VESC       0
+
 #define VESC_BT_NAME        "VESC_BT"
 #define BT_LOCAL_NAME       "FuriosaHUD"
 

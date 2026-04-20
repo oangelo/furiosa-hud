@@ -1,6 +1,8 @@
 #pragma once
 #include <Arduino.h>
 
+enum BtState { BT_OFF, BT_CONNECTED, BT_RECONNECTING };
+
 struct VescData {
   float speed;
   float voltage;
@@ -10,7 +12,7 @@ struct VescData {
   float duty;
   float tripKm;
   int batteryPct;
-  bool btConnected;
+  BtState btState;
   float ampHours;
   long tachometerAbs;
   int error;

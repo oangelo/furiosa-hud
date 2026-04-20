@@ -17,28 +17,16 @@ static unsigned long scanStartTime = 0;
 
 String vesc_bt::lastConnectedAddress = "";
 
-static void onDeviceFound(BTAdvertisedDevice *pDevice) {
-  if (deviceCount >= BT_MAX_DEVICES) return;
-
-  for (int i = 0; i < deviceCount; i++) {
-    if (devices[i].address == pDevice->getAddress().toString().c_str()) return;
-  }
-
-  BtDevice dev;
-  dev.address = pDevice->getAddress().toString().c_str();
-  dev.hasName = pDevice->haveName();
-  dev.name = dev.hasName ? pDevice->getName().c_str() : "";
-  devices[deviceCount] = dev;
-  deviceCount++;
-
-  Serial.printf("[BT] Found: %s %s\n",
-    dev.hasName ? dev.name.c_str() : "(sem nome)",
-    dev.address.c_str());
+static void onConfirmRequest(uint32_t numVal) {
+  Serial.printf("[BT] SSP confirm request: %lu — auto-accepting\n", numVal);
+  SerialBT.confirmReply(true);
 }
 
 void vesc_bt::init() {
+  SerialBT.enableSSP();
+  SerialBT.onConfirmRequest(onConfirmRequest);
   SerialBT.begin(BT_LOCAL_NAME, true);
-  Serial.println("[BT] Initialized as master");
+  Serial.println("[BT] Initialized as master (SSP auto-confirm)");
 }
 
 void vesc_bt::startScan() {
@@ -127,6 +115,14 @@ bool vesc_bt::connectByIndex(int index) {
     return true;
   }
 
+  Serial.println("[BT] Trying direct channel 1...");
+  if (SerialBT.connect(mac, 1)) {
+    vesc.setSerialPort(&SerialBT);
+    lastConnectedAddress = dev.address;
+    Serial.printf("[BT] Connected to %s (ch1)\n", dev.address.c_str());
+    return true;
+  }
+
   Serial.println("[BT] Connection failed");
   return false;
 }
@@ -145,7 +141,7 @@ bool vesc_bt::read(VescData& data) {
   data.ampHours    = vesc.data.ampHours;
   data.tachometerAbs = vesc.data.tachometerAbs;
   data.error       = vesc.data.error;
-  data.btConnected = true;
+  data.btState = BT_CONNECTED;
 
   float erpm = vesc.data.rpm;
   float rpm = erpm / (float)MOTOR_POLE_PAIRS;

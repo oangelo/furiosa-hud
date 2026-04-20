@@ -5,7 +5,6 @@
 - Cada experimento em `experiments/NN-nome/` é independente com seu próprio `platformio.ini`
 - PlatformIO compila **todos** os `.cpp` em `src/` — arquivos fora de `src/` são ignorados
 - Para preservar código sem compilar, mover para a raiz do experimento (ex: `main_display_sim.cpp`)
-
 ## Build & Flash
 
 ```bash
@@ -71,9 +70,9 @@ O `case COMM_GET_VALUES_SELECTIVE` declara variável sem chaves, causando erro c
 ## State Machine (06-vesc-gauge)
 
 ```
-SCANNING → LIST → CONNECTING → CONNECTED
-                                 ↓
-                            RECONNECTING → (volta CONNECTED ou SCANNING)
+SCANNING → LIST → CONNECTING → DASHBOARD
+                                ↕
+                           RECONNECTING → (volta DASHBOARD ou SCANNING)
 ```
 
 | Estado | Descrição |
@@ -81,5 +80,73 @@ SCANNING → LIST → CONNECTING → CONNECTED
 | SCANNING | `discover()` síncrono, bloqueia até completar. Tela "Procurando..." |
 | LIST | Mostra devices na tela, espera touch. Auto-connect se achar `VESC_BT_NAME` |
 | CONNECTING | `SerialBT.connect()`. Tela "Conectando..." |
-| CONNECTED | `getVescValues()` a cada 250ms, imprime no Serial. Tela "Conectado!" |
-| RECONNECTING | Tenta reconectar a cada 3s. Se sem endereço, volta ao scan |
+| DASHBOARD | `getVescValues()` a cada 250ms, gauge + topbar + alerts no display. Touch troca tela detail |
+| RECONNECTING | Dashboard visível com speed=0 e BT amarelo. Tenta reconectar a cada 3s |
+
+## Modo Simulação
+
+`SIMULATE_VESC` no `config.h` controla o comportamento:
+
+| Valor | Comportamento |
+|---|---|
+| `1` | Pula BT, dados simulados no loop. Dashboard animado sem hardware |
+| `0` | Fluxo BT real. Scan → connect → DASHBOARD com dados do VESC |
+
+## Simulador VESC via Bluetooth
+
+`tools/vesc_sim.py` — simula um VESC via BT SPP no PC.
+
+### Dependências (Arch Linux)
+
+```bash
+sudo pacman -S python-pybluez dbus-python
+```
+
+### Uso
+
+```bash
+# 1. Registrar serviço SPP (requer root)
+sudo sdptool add SP
+
+# 2. Tornar PC visível e pareável
+bluetoothctl discoverable on
+bluetoothctl pairable on
+
+# 3. Rodar simulador
+python3 tools/vesc_sim.py
+```
+
+### Controles do simulador
+
+| Tecla | Ação |
+|---|---|
+| `↑`/`w` | Aumentar velocidade (+2 km/h) |
+| `↓`/`s` | Diminuir velocidade (-2 km/h) |
+| `t` | Spike de temperatura por 5s |
+| `f` | Ciclar fault codes (0-4) |
+| `r` | Resetar todos os valores |
+| `q` | Sair |
+
+### Nota (Arch Linux)
+
+O `sdptool` foi removido do `bluez-utils` nas versões recentes. Instalar via AUR (`bluez-deprecated-tools`) ou compilar do fonte. Sem o registro SDP, o ESP32 pareia mas não consegue encontrar o canal RFCOMM.
+
+Com um **VESC real** (com módulo BT Classic embutido), nenhuma configuração de PC é necessária — o ESP32 conecta diretamente.
+
+### Compatibilidade de Hardware
+
+| Hardware | BT Classic SPP | Compatível |
+|---|---|---|
+| VESC + módulo BT Classic (Flipsky, etc.) | Sim | **Sim** |
+| VESC Express (ESP32-C3) | Não (BLE only) | **Não** |
+
+O ESP32-C3 e ESP32-S3 só suportam BLE. O `BluetoothSerial` (SPP) requer ESP32 original (D0WD, WROOM, WROVER).
+Para suportar VESC Express seria necessário reescrever a camada BT usando BLE GATT.
+
+## BtState — Indicador Bluetooth
+
+| Estado | Cor | Significado |
+|---|---|---|
+| `BT_OFF` | Vermelho piscando | Desconectado |
+| `BT_CONNECTED` | Verde sólido | Conectado, recebendo dados |
+| `BT_RECONNECTING` | Amarelo sólido | Conexão perdida, tentando reconectar |

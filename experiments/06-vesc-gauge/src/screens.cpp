@@ -41,12 +41,18 @@ static void drawBatteryBar(int pct) {
     lcd.fillRect(BAT_X + 1 + fillW, BAT_Y + 1, innerW - fillW, BAT_H - 2, TFT_BLACK);
 }
 
-static void drawBtStatus(bool connected) {
+static void drawBtStatus(BtState btState) {
   uint16_t col;
-  if (connected) {
-    col = 0x07E0;
-  } else {
-    col = ((millis() / 400) % 2 == 0) ? 0xF800 : 0xFD00;
+  switch (btState) {
+    case BT_CONNECTED:
+      col = 0x07E0;
+      break;
+    case BT_RECONNECTING:
+      col = 0xFFE0;
+      break;
+    default:
+      col = ((millis() / 400) % 2 == 0) ? 0xF800 : 0xFD00;
+      break;
   }
 
   lcd.setTextDatum(middle_right);
@@ -76,7 +82,7 @@ static void drawTopBar(const VescData& data, bool showVoltage) {
   }
   lcd.drawString(buf, BAT_X + BAT_W + 6, BAT_Y + BAT_H / 2);
 
-  drawBtStatus(data.btConnected);
+  drawBtStatus(data.btState);
 }
 
 static void drawAlerts(const VescData& data) {
@@ -137,23 +143,41 @@ static void drawDetailValue(int col, int row, const char* text, uint16_t color) 
   lcd.drawString(text, x, y);
 }
 
+static void drawDetailError(int error) {
+  lcd.fillRect(60, 100, 200, 28, TFT_BLACK);
+  lcd.setTextDatum(middle_center);
+  lcd.setFont(&fonts::Font4);
+  lcd.setTextColor(TFT_RED);
+  char buf[24];
+  snprintf(buf, sizeof(buf), "FAULT: %d", error);
+  lcd.drawString(buf, 160, 114);
+}
+
 static void updateDetailValues(const VescData& data) {
   char buf[16];
 
-  snprintf(buf, sizeof(buf), "%.1f km", data.tripKm);
-  drawDetailValue(0, 0, buf, TFT_WHITE);
+  if (data.error != 0) {
+    drawDetailError(data.error);
+  } else {
+    snprintf(buf, sizeof(buf), "%.1f km", data.tripKm);
+    drawDetailValue(0, 0, buf, TFT_WHITE);
 
-  float power = data.voltage * data.current;
-  snprintf(buf, sizeof(buf), "%.0f W", power);
-  drawDetailValue(1, 0, buf, TFT_WHITE);
+    float power = data.voltage * data.current;
+    snprintf(buf, sizeof(buf), "%.0f W", power);
+    drawDetailValue(1, 0, buf, TFT_WHITE);
+  }
 
   snprintf(buf, sizeof(buf), "%.0f C", data.tempEsc);
   uint16_t escCol = data.tempEsc > TEMP_ESC_WARNING ? TFT_RED : TFT_WHITE;
   drawDetailValue(0, 1, buf, escCol);
 
-  snprintf(buf, sizeof(buf), "%.0f C", data.tempMotor);
-  uint16_t motCol = data.tempMotor > TEMP_MOTOR_WARNING ? TFT_RED : TFT_WHITE;
-  drawDetailValue(1, 1, buf, motCol);
+  if (data.tempMotor < 0) {
+    drawDetailValue(1, 1, "N/A", 0x8410);
+  } else {
+    snprintf(buf, sizeof(buf), "%.0f C", data.tempMotor);
+    uint16_t motCol = data.tempMotor > TEMP_MOTOR_WARNING ? TFT_RED : TFT_WHITE;
+    drawDetailValue(1, 1, buf, motCol);
+  }
 
   snprintf(buf, sizeof(buf), "%.1f A", data.current);
   drawDetailValue(0, 2, buf, TFT_WHITE);
@@ -190,7 +214,8 @@ void screens::update(const VescData& data) {
 
   if (currentScreen == SCREEN_MAIN) {
     drawTopBar(data, false);
-    gauge::update(data.speed);
+    float displaySpeed = (data.btState == BT_CONNECTED) ? data.speed : 0.0f;
+    gauge::update(displaySpeed);
     drawAlerts(data);
   } else {
     drawTopBar(data, true);

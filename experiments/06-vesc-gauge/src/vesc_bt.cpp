@@ -18,6 +18,18 @@ static bool scanDone = false;
 
 String vesc_bt::lastConnectedAddress = "";
 
+static void sortByRssi(BtDevice* devs, int count) {
+  for (int i = 0; i < count - 1; i++) {
+    for (int j = i + 1; j < count; j++) {
+      if (devs[j].rssi > devs[i].rssi) {
+        BtDevice tmp = devs[i];
+        devs[i] = devs[j];
+        devs[j] = tmp;
+      }
+    }
+  }
+}
+
 static void onConfirmRequest(uint32_t numVal) {
   Serial.printf("[BT] SSP confirm request: %lu — auto-accepting\n", numVal);
   SerialBT.confirmReply(true);
@@ -58,6 +70,7 @@ void vesc_bt::startScan() {
         btDev.hasName = dev->haveName();
         btDev.name = btDev.hasName ? dev->getName().c_str() : "";
         btDev.type = BT_TYPE_CLASSIC;
+        btDev.rssi = dev->getRSSI();
         devices[deviceCount] = btDev;
         deviceCount++;
 
@@ -69,6 +82,7 @@ void vesc_bt::startScan() {
       Serial.println("[BT] Scan returned null!");
     }
     scanDone = true;
+    sortByRssi(devices, deviceCount);
   } else {
     ble_transport::startScan();
     deviceCount = ble_transport::getDeviceCount();
@@ -89,6 +103,7 @@ bool vesc_bt::isScanComplete() {
       BtDevice d = ble_transport::getDevice(i);
       devices[i] = d;
     }
+    sortByRssi(devices, deviceCount);
     return true;
   }
   return false;
@@ -122,7 +137,7 @@ bool vesc_bt::connectByIndex(int index) {
   if (index < 0 || index >= deviceCount) return false;
 
   if (currentBtType == BT_TYPE_BLE) {
-    if (!ble_transport::connectByIndex(index)) return false;
+    if (!ble_transport::connectByAddress(devices[index].address.c_str())) return false;
     vesc.setSerialPort(ble_transport::getStream());
     lastConnectedAddress = devices[index].address;
     return true;

@@ -40,6 +40,7 @@ class VescAdvertisedDevice : public BLEAdvertisedDeviceCallbacks {
     dev.hasName = advertisedDevice.haveName();
     dev.name = dev.hasName ? advertisedDevice.getName().c_str() : "";
     dev.type = BT_TYPE_BLE;
+    dev.rssi = advertisedDevice.getRSSI();
     devices[deviceCount] = dev;
     deviceCount++;
 
@@ -138,13 +139,13 @@ int ble_transport::findDeviceByName(const char* name) {
 
 bool ble_transport::connectByIndex(int index) {
   if (index < 0 || index >= deviceCount) return false;
+  return connectByAddress(devices[index].address.c_str());
+}
 
-  BtDevice& dev = devices[index];
-  Serial.printf("[BLE] Connecting to %s (%s)...\n",
-    dev.hasName ? dev.name.c_str() : "(sem nome)",
-    dev.address.c_str());
+bool ble_transport::connectByAddress(const char* address) {
+  Serial.printf("[BLE] Connecting to %s...\n", address);
 
-  BLEAddress addr(dev.address.c_str());
+  BLEAddress addr(address);
   if (!bleClient->connect(addr)) {
     Serial.println("[BLE] Connection failed");
     return false;
@@ -176,9 +177,9 @@ bool ble_transport::connectByIndex(int index) {
 
   bleBufHead = 0;
   bleBufTail = 0;
-  lastConnectedAddr = dev.address;
+  lastConnectedAddr = address;
 
-  Serial.printf("[BLE] Connected to %s\n", dev.address.c_str());
+  Serial.printf("[BLE] Connected to %s\n", address);
   return true;
 }
 

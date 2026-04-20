@@ -8,4 +8,5 @@ struct BtDevice {
   String address;
   bool hasName;
   BtType type;
+  int16_t rssi;
 };

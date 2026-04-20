@@ -143,6 +143,7 @@ void loop() {
           screenDirty = false;
           enterState(CONNECTING);
         } else {
+          bt_screen::resetScroll();
           enterState(LIST);
         }
       }
@@ -150,31 +151,46 @@ void loop() {
     }
 
     case LIST: {
+      int count = vesc_bt::getDeviceCount();
+      BtDevice devs[BT_MAX_DEVICES];
+      for (int i = 0; i < count; i++) devs[i] = vesc_bt::getDevice(i);
+
       if (screenDirty) {
-        int count = vesc_bt::getDeviceCount();
-        BtDevice devs[BT_MAX_DEVICES];
-        for (int i = 0; i < count; i++) devs[i] = vesc_bt::getDevice(i);
         bt_screen::drawDeviceListStatic(devs, count, vesc_bt::getBtType());
         screenDirty = false;
       }
 
-      int count = vesc_bt::getDeviceCount();
-      BtDevice devs[BT_MAX_DEVICES];
-      for (int i = 0; i < count; i++) devs[i] = vesc_bt::getDevice(i);
       int touch = bt_screen::handleTouch(devs, count);
 
       if (touch == -3) {
+        bt_screen::flashButton(touch, devs, count);
+        bt_screen::drawScanningStatic();
         BtType newType = (vesc_bt::getBtType() == BT_TYPE_CLASSIC) ? BT_TYPE_BLE : BT_TYPE_CLASSIC;
         vesc_bt::setBtType(newType);
         vesc_bt::startScan();
-        enterState(SCANNING);
+        bt_screen::resetScroll();
+        stateEnterTime = millis();
+        screenDirty = false;
+        state = SCANNING;
       } else if (touch == -2) {
+        bt_screen::flashButton(touch, devs, count);
+        bt_screen::drawScanningStatic();
         vesc_bt::startScan();
-        enterState(SCANNING);
+        bt_screen::resetScroll();
+        stateEnterTime = millis();
+        screenDirty = false;
+        state = SCANNING;
+      } else if (touch == -4) {
+        bt_screen::flashButton(touch, devs, count);
+        bt_screen::scrollUp(count);
+        screenDirty = true;
+      } else if (touch == -5) {
+        bt_screen::flashButton(touch, devs, count);
+        bt_screen::scrollDown(count);
+        screenDirty = true;
       } else if (touch >= 0) {
+        bt_screen::flashButton(touch, devs, count);
         selectedIndex = touch;
-        const char* name = devs[touch].hasName
-          ? devs[touch].name.c_str() : devs[touch].address.c_str();
         enterState(CONNECTING);
       }
       break;

@@ -11,6 +11,7 @@ namespace ble_transport {
   const BtDevice& getDevice(int index);
   int findDeviceByName(const char* name);
   bool connectByIndex(int index);
+  bool connectByAddress(const char* address);
   bool isConnected();
   Stream* getStream();
   void disconnect();

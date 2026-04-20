@@ -12,4 +12,8 @@ namespace bt_screen {
   void drawDisconnectedStatic();
 
   int handleTouch(BtDevice* devices, int count);
+  void flashButton(int touchResult, BtDevice* devices, int count);
+  void resetScroll();
+  void scrollUp(int count);
+  void scrollDown(int count);
 }

@@ -41,6 +41,14 @@ static constexpr uint16_t COL_FLASH_SCR  = 0xB5B6;
 
 static int scrollOffset = 0;
 
+static constexpr int CHOOSE_BTN_W = 260;
+static constexpr int CHOOSE_BTN_H = 48;
+static constexpr int CHOOSE_BTN_X = 30;
+static constexpr int CHOOSE_BTN_Y[3] = {52, 112, 172};
+static constexpr uint16_t COL_CLASSIC_BG = 0x1BF5;
+static constexpr uint16_t COL_BLE_BG     = 0x04DF;
+static constexpr uint16_t COL_WIFI_BG    = 0x04FF;
+
 static const char* connTypeLabel(ConnType t) {
   switch (t) {
     case CONN_CLASSIC: return "Classic";
@@ -60,6 +68,43 @@ static void drawHeader() {
   lcd.setTextDatum(middle_right);
   lcd.setTextColor(COL_BT_BLUE);
   lcd.drawString("BT/WiFi", 310, HEADER_H / 2);
+}
+
+void bt_screen::drawChoosingStatic() {
+  lcd.fillScreen(COL_BG);
+  drawHeader();
+
+  lcd.setTextDatum(middle_center);
+  lcd.setFont(&fonts::Font4);
+  lcd.setTextColor(COL_TEXT);
+  lcd.drawString("Conectar via", 160, 38);
+
+  static const char* labels[3] = {"Bluetooth Classic", "BLE (VESC Express)", "WiFi (VESC Express)"};
+  static const uint16_t colors[3] = {COL_CLASSIC_BG, COL_BLE_BG, COL_WIFI_BG};
+
+  for (int i = 0; i < 3; i++) {
+    lcd.fillRoundRect(CHOOSE_BTN_X, CHOOSE_BTN_Y[i], CHOOSE_BTN_W, CHOOSE_BTN_H, 10, colors[i]);
+    lcd.setTextDatum(middle_center);
+    lcd.setFont(&fonts::Font2);
+    lcd.setTextColor(COL_TOG_TXT);
+    lcd.drawString(labels[i], CHOOSE_BTN_X + CHOOSE_BTN_W / 2, CHOOSE_BTN_Y[i] + CHOOSE_BTN_H / 2);
+  }
+}
+
+ConnType bt_screen::handleChoosingTouch() {
+  int16_t tx, ty;
+  if (!lcd.getTouch(&tx, &ty)) return (ConnType)-1;
+
+  for (int i = 0; i < 3; i++) {
+    if (tx >= CHOOSE_BTN_X && tx <= CHOOSE_BTN_X + CHOOSE_BTN_W &&
+        ty >= CHOOSE_BTN_Y[i] && ty <= CHOOSE_BTN_Y[i] + CHOOSE_BTN_H) {
+      static const uint16_t flashColors[3] = {0x7FFF, 0x7FFF, 0x7FFF};
+      lcd.fillRoundRect(CHOOSE_BTN_X, CHOOSE_BTN_Y[i], CHOOSE_BTN_W, CHOOSE_BTN_H, 10, flashColors[i]);
+      delay(120);
+      return (ConnType)i;
+    }
+  }
+  return (ConnType)-1;
 }
 
 void bt_screen::drawScanningStatic() {

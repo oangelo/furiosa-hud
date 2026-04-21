@@ -78,8 +78,8 @@ void loop() {
 
 LGFX lcd;
 
-enum State { SCANNING, LIST, CONNECTING, DASHBOARD, RECONNECTING };
-static State state = SCANNING;
+enum State { CHOOSING, SCANNING, LIST, CONNECTING, DASHBOARD, RECONNECTING };
+static State state = CHOOSING;
 static unsigned long stateEnterTime = 0;
 static int selectedIndex = -1;
 static unsigned long lastReconnectAttempt = 0;
@@ -124,16 +124,7 @@ void setup() {
   vescData.error       = 0;
 
   vesc_bt::init();
-
-  if (vesc_bt::getConnType() == CONN_WIFI) {
-    bt_screen::drawWifiConnectingStatic();
-    screenDirty = false;
-    selectedIndex = 0;
-    enterState(CONNECTING);
-  } else {
-    vesc_bt::startScan();
-    enterState(SCANNING);
-  }
+  enterState(CHOOSING);
   Serial.println("07-vesc-wifi ready");
 }
 
@@ -141,6 +132,30 @@ void loop() {
   unsigned long now = millis();
 
   switch (state) {
+    case CHOOSING: {
+      if (screenDirty) {
+        bt_screen::drawChoosingStatic();
+        screenDirty = false;
+      }
+
+      ConnType choice = bt_screen::handleChoosingTouch();
+      if (choice == (ConnType)-1) break;
+
+      vesc_bt::setConnType(choice);
+      Serial.printf("[STATE] User chose: %s\n",
+        choice == CONN_CLASSIC ? "Classic" :
+        choice == CONN_BLE ? "BLE" : "WiFi");
+
+      if (choice == CONN_WIFI) {
+        selectedIndex = 0;
+        enterState(CONNECTING);
+      } else {
+        vesc_bt::startScan();
+        enterState(SCANNING);
+      }
+      break;
+    }
+
     case SCANNING: {
       if (screenDirty) {
         bt_screen::drawScanningStatic();

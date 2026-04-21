@@ -3,6 +3,9 @@
 #include "vesc_bt.h"
 
 namespace bt_screen {
+  void drawChoosingStatic();
+  ConnType handleChoosingTouch();
+
   void drawScanningStatic();
   void updateScanningDots(unsigned long elapsed);
   void drawWifiConnectingStatic();

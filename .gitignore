@@ -11,3 +11,5 @@
 *.gcda
 *.gcov
 lib/readme.txt
+wifi_secrets.h
+**/wifi_secrets.h

@@ -1,0 +1,20 @@
+#pragma once
+#include <Arduino.h>
+#include "vesc_bt.h"
+
+namespace bt_screen {
+  void drawScanningStatic();
+  void updateScanningDots(unsigned long elapsed);
+  void drawWifiConnectingStatic();
+
+  void drawDeviceListStatic(BtDevice* devices, int count, ConnType connType);
+  void drawConnectingStatic(const char* name);
+  void drawConnectedStatic(const char* name);
+  void drawDisconnectedStatic();
+
+  int handleTouch(BtDevice* devices, int count);
+  void flashButton(int touchResult, BtDevice* devices, int count);
+  void resetScroll();
+  void scrollUp(int count);
+  void scrollDown(int count);
+}

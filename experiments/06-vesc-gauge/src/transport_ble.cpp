@@ -1,4 +1,5 @@
 #include "transport_ble.h"
+#include "config.h"
 
 #include <BLEDevice.h>
 #include <BLEUtils.h>
@@ -25,6 +26,53 @@ static volatile int bleBufHead = 0;
 static volatile int bleBufTail = 0;
 
 static String lastConnectedAddr = "";
+static volatile bool bleConnected = false;
+static volatile bool bleSecured = false;
+
+class BleSecurityCallbacks : public BLESecurityCallbacks {
+  uint32_t onPassKeyRequest() {
+    Serial.printf("[BLE-SEC] Passkey request, sending %s\n", VESC_BLE_PIN);
+    return atol(VESC_BLE_PIN);
+  }
+
+  void onPassKeyNotify(uint32_t pass_key) {
+    Serial.printf("[BLE-SEC] Passkey notify: %06lu\n", pass_key);
+  }
+
+  bool onConfirmPIN(uint32_t pin) {
+    Serial.printf("[BLE-SEC] Confirm PIN: %06lu -> YES\n", pin);
+    return true;
+  }
+
+  bool onSecurityRequest() {
+    Serial.println("[BLE-SEC] Security request -> accepting");
+    return true;
+  }
+
+  void onAuthenticationComplete(esp_ble_auth_cmpl_t auth_cmpl) {
+    if (auth_cmpl.success) {
+      bleSecured = true;
+      Serial.printf("[BLE-SEC] Auth OK, addr=%s\n",
+        auth_cmpl.bd_addr);
+    } else {
+      bleSecured = false;
+      Serial.printf("[BLE-SEC] Auth FAILED, reason=0x%x\n", auth_cmpl.fail_reason);
+    }
+  }
+};
+
+class BleClientCallbacks : public BLEClientCallbacks {
+  void onConnect(BLEClient* pclient) {
+    bleConnected = true;
+    bleSecured = false;
+    Serial.println("[BLE] onConnect");
+  }
+  void onDisconnect(BLEClient* pclient) {
+    bleConnected = false;
+    bleSecured = false;
+    Serial.println("[BLE] onDisconnect");
+  }
+};
 
 class VescAdvertisedDevice : public BLEAdvertisedDeviceCallbacks {
   void onResult(BLEAdvertisedDevice advertisedDevice) override {
@@ -51,6 +99,7 @@ class VescAdvertisedDevice : public BLEAdvertisedDeviceCallbacks {
 };
 
 static void notifyCallback(BLERemoteCharacteristic* pChar, uint8_t* pData, size_t length, bool isNotify) {
+  Serial.printf("[BLE-NOTIFY] %d bytes\n", length);
   for (size_t i = 0; i < length; i++) {
     int next = (bleBufHead + 1) % BLE_BUF_SIZE;
     if (next != bleBufTail) {
@@ -82,7 +131,7 @@ public:
 
   size_t write(uint8_t byte) override {
     if (!rxChar) return 0;
-    rxChar->writeValue(&byte, 1);
+    rxChar->writeValue(&byte, 1, false);
     return 1;
   }
 
@@ -91,7 +140,7 @@ public:
     size_t written = 0;
     while (written < size) {
       size_t chunk = min((size_t)20, size - written);
-      rxChar->writeValue((uint8_t*)(buf + written), chunk);
+      rxChar->writeValue((uint8_t*)(buf + written), chunk, false);
       written += chunk;
     }
     return written;
@@ -100,9 +149,33 @@ public:
 
 static BLEStream bleStream;
 
+static void setupBLESecurity() {
+  BLEDevice::setEncryptionLevel(ESP_BLE_SEC_ENCRYPT_MITM);
+  BLEDevice::setSecurityCallbacks(new BleSecurityCallbacks());
+
+  esp_ble_auth_req_t auth_req = ESP_LE_AUTH_REQ_SC_MITM_BOND;
+  esp_ble_io_cap_t iocap = ESP_IO_CAP_KBDISP;
+  uint8_t init_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
+  uint8_t rsp_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
+  uint8_t key_size = 16;
+
+  esp_ble_gap_set_security_param(ESP_BLE_SM_AUTHEN_REQ_MODE, &auth_req, sizeof(uint8_t));
+  esp_ble_gap_set_security_param(ESP_BLE_SM_IOCAP_MODE, &iocap, sizeof(uint8_t));
+  esp_ble_gap_set_security_param(ESP_BLE_SM_SET_INIT_KEY, &init_key, sizeof(uint8_t));
+  esp_ble_gap_set_security_param(ESP_BLE_SM_SET_RSP_KEY, &rsp_key, sizeof(uint8_t));
+  esp_ble_gap_set_security_param(ESP_BLE_SM_MAX_KEY_SIZE, &key_size, sizeof(uint8_t));
+
+  uint32_t passkey = atol(VESC_BLE_PIN);
+  esp_ble_gap_set_security_param(ESP_BLE_SM_SET_STATIC_PASSKEY, &passkey, sizeof(uint32_t));
+
+  Serial.printf("[BLE] Security configured, PIN=%s\n", VESC_BLE_PIN);
+}
+
 void ble_transport::init() {
   BLEDevice::init(BT_LOCAL_NAME);
+  setupBLESecurity();
   bleClient = BLEDevice::createClient();
+  bleClient->setClientCallbacks(new BleClientCallbacks());
   Serial.println("[BLE] Initialized");
 }
 
@@ -120,7 +193,7 @@ void ble_transport::startScan() {
     bleScan->setWindow(99);
   }
 
-  Serial.println("[BLE] Starting async scan...");
+  Serial.println("[BLE] Starting scan...");
   bleScan->start(BT_SCAN_TIMEOUT_MS / 1000, false);
   scanDone = true;
   Serial.printf("[BLE] Scan complete, %d devices found\n", deviceCount);
@@ -142,7 +215,26 @@ bool ble_transport::connectByIndex(int index) {
   return connectByAddress(devices[index].address.c_str());
 }
 
+static bool waitForSecurity(int timeoutMs) {
+  unsigned long start = millis();
+  while (!bleSecured && (millis() - start < (unsigned long)timeoutMs)) {
+    delay(10);
+  }
+  if (!bleSecured) {
+    Serial.println("[BLE] Security timeout!");
+    return false;
+  }
+  Serial.println("[BLE] Security established");
+  return true;
+}
+
 bool ble_transport::connectByAddress(const char* address) {
+  if (bleScan) bleScan->stop();
+
+  txChar = nullptr;
+  rxChar = nullptr;
+  bleSecured = false;
+
   Serial.printf("[BLE] Connecting to %s...\n", address);
 
   BLEAddress addr(address);
@@ -151,7 +243,15 @@ bool ble_transport::connectByAddress(const char* address) {
     return false;
   }
 
-  Serial.println("[BLE] Connected, discovering service...");
+  Serial.println("[BLE] Connected, waiting for security...");
+  if (!waitForSecurity(5000)) {
+    Serial.println("[BLE] Continuing without security...");
+  }
+
+  Serial.println("[BLE] Negotiating MTU...");
+  bleClient->setMTU(517);
+
+  Serial.println("[BLE] Discovering service...");
   BLERemoteService* service = bleClient->getService(VESC_SERVICE_UUID);
   if (!service) {
     Serial.println("[BLE] VESC service not found");
@@ -170,16 +270,19 @@ bool ble_transport::connectByAddress(const char* address) {
     return false;
   }
 
-  if (txChar->canNotify()) {
-    txChar->registerForNotify(notifyCallback);
-    Serial.println("[BLE] Subscribed to TX notifications");
-  }
+  Serial.printf("[BLE] TX canNotify=%d canIndicate=%d\n",
+    txChar->canNotify(), txChar->canIndicate());
+  Serial.printf("[BLE] RX canWrite=%d canWriteNoResponse=%d\n",
+    rxChar->canWrite(), rxChar->canWriteNoResponse());
+
+  txChar->registerForNotify(notifyCallback);
+  Serial.println("[BLE] registerForNotify called");
 
   bleBufHead = 0;
   bleBufTail = 0;
   lastConnectedAddr = address;
 
-  Serial.printf("[BLE] Connected to %s\n", address);
+  Serial.printf("[BLE] Ready! secured=%d mtu=%d\n", bleSecured, bleClient->getMTU());
   return true;
 }
 

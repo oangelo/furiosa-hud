@@ -185,8 +185,18 @@ bool vesc_bt::isConnected() {
 }
 
 bool vesc_bt::read(VescData& data) {
-  if (!isConnected()) return false;
-  if (!vesc.getVescValues()) return false;
+  if (!isConnected()) {
+    Serial.println("[VESC] read: not connected");
+    return false;
+  }
+
+  Stream* stream = (currentBtType == BT_TYPE_BLE) ? ble_transport::getStream() : (Stream*)&SerialBT;
+  Serial.printf("[VESC] read: stream available=%d\n", stream->available());
+
+  if (!vesc.getVescValues()) {
+    Serial.println("[VESC] getVescValues failed");
+    return false;
+  }
 
   data.voltage     = vesc.data.inpVoltage;
   data.current     = vesc.data.avgInputCurrent;

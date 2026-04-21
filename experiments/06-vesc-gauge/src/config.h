@@ -21,6 +21,8 @@
 #define TEMP_MOTOR_WARNING  100
 #define BATTERY_LOW_PCT     20
 
+#define VESC_BLE_PIN        "123456"
+
 #define VESC_POLL_MS        250
 #define DISPLAY_UPDATE_MS   100
 #define DETAIL_SCREEN_TIMEOUT 5000
